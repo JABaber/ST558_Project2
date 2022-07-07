@@ -6,20 +6,22 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = 'F:\\Graduate\\NCSU_courses\\ST558\\projects\\Project_2\\OnlineNewsPopularity')
+#knitr::opts_knit$set(root.dir = 'F:\\Graduate\\NCSU_courses\\ST558\\projects\\Project_2\\OnlineNewsPopularity')
+set.seed(558)
 ```
 
 ```{r, include=FALSE}
 library(tidyverse)
 library(reader)
 library(corrplot)
+library(caret)
 ```
 
 
 Read in the data set
 ```{r}
 # Read in the data set and remove the non-predictive variables 
-shares_Data <- read_csv("OnlineNewsPopularity.csv")[-2:-1]
+shares_Data <- read_csv("C:/Users/squas/OneDrive/Desktop/ST 558/Data/OnlineNewsPopularity.csv")[-2:-1]
 head(shares_Data)
 ```
 
@@ -41,15 +43,89 @@ shares_Lifestyle <- shares_Data_chl %>% filter(channel == "Lifestyle")
 ```
 
 ```{r}
-names(shares_Lifestyle)[c(2:4, 9:11, 15, 18, 21, 24:31, 38:41, 44, 47, 50:54)]
+# These are the variables we will be using
+varcols <- c(2:4, 7, 9:11, 15, 18, 21, 24:32, 38:41, 44, 47, 50:54)
+names(shares_Lifestyle)[varcols]
+```
+
+```{r}
+# Subset lifestyles table into relevant columns
+shares_Lifestyle <- shares_Lifestyle[,varcols]
+# Split into testing and training
+trainIndices <- createDataPartition(shares_Lifestyle$shares, p = 0.7, list = FALSE)
+# Create training set
+lifestyleTrain <- shares_Lifestyle[trainIndices,]
+# Create testing set
+lifestyleTest <- shares_Lifestyle[-trainIndices,]
 ```
 
 
-```{r, fig.height= 12, fig.width = 18}
-Correlation <- cor(shares_Lifestyle[c(2:4, 9:11, 15, 18, 21, 24:31, 38:41, 44, 47, 50:54)], method = "spearman")
 
-corrplot(Correlation, type = "upper", tl.pos = "lt")
-corrplot(Correlation, type = "lower", method = "number", add = TRUE, diag = FALSE, tl.pos = "n")
+
+```{r}
+# Shares by day
+# create a single variable representing the data channel
+day <- factor(cbind(VALUE = factor(max.col(lifestyleTrain[12:18]), ordered = TRUE)))
+levels(day) <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
+
+# Create a new data set using the single variable representing the data channel
+daily_Shares_Data_Lifestyle <- lifestyleTrain %>% 
+  select(-starts_with("weekday_is")) %>% 
+  mutate(day) %>% 
+  select(day, everything())
+daily_Shares_Data_Lifestyle %>% 
+  group_by(day) %>%
+  summarize(avgShares = mean(shares), medShares = median(shares), minShares = min(shares), 
+            maxShares = max(shares), sdShares = sd(shares))
 ```
 
-Check the push. 
+```{r}
+# Bar chart of mean shares  
+daily_Means <- daily_Shares_Data_Lifestyle %>% 
+  group_by(day) %>%
+  summarize(avgShares = mean(shares))
+ggplot(daily_Means, aes(x = day, y = avgShares)) + 
+  geom_line(aes(group = 1), color = "blue") + geom_point() + 
+  labs(title = "Average Shares Per Day") + 
+  xlab("Day of Week") + ylab("Mean Shares")
+```
+
+```{r}
+# Counts by day
+table(daily_Shares_Data_Lifestyle$day)
+```
+
+```{r}
+lifestyleTrain %>% 
+  summarize(avgLinks = mean(num_hrefs), avgImages = mean(num_imgs), avgVideos = mean(num_videos))
+```
+
+```{r}
+ggplot(lifestyleTrain, aes(x = shares)) + geom_boxplot() + labs(title = "Boxplot of Shares") + 
+  xlab("Number of Shares")
+```
+
+```{r}
+ggplot(lifestyleTrain, aes(x = shares)) + geom_boxplot(outlier.shape = NA) +
+  scale_x_continuous(limits = c(min(lifestyleTrain$shares), 2*IQR(lifestyleTrain$shares))) + 
+  labs(title = "Boxplot of Shares (Outliers Removed)") + xlab("Number of Shares")
+```
+
+
+```{r}
+ggplot(data = lifestyleTrain, aes(x = n_tokens_content, y = shares)) + 
+  geom_point(aes(col = factor(is_weekend))) + 
+  labs(title = "Word Count and Shares, Colored by Weekend/Weekday") + 
+  xlab("Word Count") + ylab("Number of Shares") + 
+  scale_color_discrete(name = " ", labels = c("Weekday", "Weekend"))
+```
+
+```{r}
+ggplot(data = lifestyleTrain, aes(x = n_tokens_content, y = shares)) + 
+  geom_point(aes(col = factor(is_weekend))) + 
+  labs(title = " Zoomed In Word Count and Shares, Colored by Weekend/Weekday") + 
+  xlab("Word Count") + ylab("Number of Shares") + 
+  scale_color_discrete(name = " ", labels = c("Weekday", "Weekend")) + 
+  coord_cartesian(xlim = c(0, 2000), ylim = c(0, 40000))
+```
+
