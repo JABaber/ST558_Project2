@@ -15,6 +15,7 @@ library(tidyverse)
 library(reader)
 library(corrplot)
 library(caret)
+library(elasticnet)
 ```
 
 
@@ -127,5 +128,79 @@ ggplot(data = lifestyleTrain, aes(x = n_tokens_content, y = shares)) +
   xlab("Word Count") + ylab("Number of Shares") + 
   scale_color_discrete(name = " ", labels = c("Weekday", "Weekend")) + 
   coord_cartesian(xlim = c(0, 2000), ylim = c(0, 40000))
+```
+
+```{r}
+# Remove is_weekend variable keep day column
+dailyLifestyleTrain <- daily_Shares_Data_Lifestyle %>% select(-is_weekend)
+day <- factor(cbind(VALUE = factor(max.col(lifestyleTest[12:18]), ordered = TRUE)))
+levels(day) <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
+
+# Create a new data set using the single variable representing the data channel
+daily_Shares_Test_Lifestyle <- lifestyleTest %>% 
+  select(-starts_with("weekday_is")) %>% 
+  mutate(day) %>% 
+  select(day, everything())
+dailyLifestyleTest <- daily_Shares_Test_Lifestyle %>% select(-is_weekend)
+```
+
+```{r}
+# Linear Regression Model using LASSO
+lassoFit <- train(shares ~ ., data = dailyLifestyleTrain, method = "lasso",
+                  preProcess = c("center", "scale"))
+```
+
+```{r}
+predslinear <- predict(lassoFit, newdata = dailyLifestyleTest)
+postResample(predslinear, obs = dailyLifestyleTest$shares)
+```
+
+```{r}
+# Values of n.trees
+nTrees <- c(10, 50, 100, 200)
+# Values of interaction.depth
+intDepth <- c(1, 2, 3, 4)
+# Value of shrinkage
+shrink <- c(0.001, 0.05, 0.1, 0.5)
+# Value of n.minobsinnode
+nodeMinN <- c(5, 10, 15, 20)
+# Fit the boosted tree model on the training data
+lifestyleBoost <- train(shares ~ ., data = lifestyleTrain, method = "gbm",
+                        # Perform 5 fold cross validation repeated 3 times
+                        trControl = trainControl(method = "cv", number = 10),
+                        # Standardize the data, hide output with verborse = FALSE
+                        preProcess = c("center", "scale"), verbose = FALSE,
+                        # Check all possible combinations of n.trees, interaction.depth,
+                        # shrinkage, and n.minobsinnode tuning parameters
+                        tuneGrid = expand.grid(n.trees = nTrees, interaction.depth = intDepth,
+                                               shrinkage = shrink, n.minobsinnode = nodeMinN))
+```
+
+
+
+```{r}
+# Generate confusion matrix to assess model fit on testing data
+predsBoost <- predict(lifestyleBoost, newdata = lifestyleTest)
+postResample(predsBoost, obs = lifestyleTest$shares)[[1]]
+```
+
+```{r}
+bestModel <- function(linearmodel, boostedmodel){
+  predslinear <- predict(linearmodel, newdata = lifestyleTest)
+  predsboost <- predict(boostedmodel, newdata = lifestyleTest)
+  RMSElinear <- postResample(predslinear, obs = lifestyleTest$shares)[[1]]
+  RMSEboost <- postResample(predsboost, obs = lifestyleTest$shares)[[1]]
+  bestRMSE <- min(c(RMSElinear, RMSEboost))
+  if(bestRMSE == RMSElinear){
+    print("The Linear Model Had the Lowest RMSE")
+  }
+  else if(bestRMSE == RMSEboost){
+    print("The Boosted Tree Model Had the Lowest RMSE")
+  }
+}
+```
+
+```{r}
+bestModel(linearmodel = lassoFit, boostedmodel = lifestyleBoost)
 ```
 
