@@ -51,3 +51,5 @@ Correlation <- cor(shares_Lifestyle[c(2:4, 9:11, 15, 18, 21, 24:31, 38:41, 44, 4
 corrplot(Correlation, type = "upper", tl.pos = "lt")
 corrplot(Correlation, type = "lower", method = "number", add = TRUE, diag = FALSE, tl.pos = "n")
 ```
+
+Check the push. 
